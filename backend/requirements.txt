@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+pydantic-settings
+python-dotenv
+transformers
+torch
+torchaudio
+pyannote.audio
+pynvml
