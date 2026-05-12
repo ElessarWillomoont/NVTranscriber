@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.aligner import align_and_write_srt
 from backend.core.forced_aligner import forced_align_and_write_srt
+from backend.core.refiner import run_focus_mode
 from backend.core.asr_engine import run_asr
 from backend.core.chunker import chunk_audio
 from backend.core.converter import convert_to_wav, scan_directory
@@ -151,6 +152,44 @@ async def _process_task(task_id: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Focus Mode background task (Phase 2.7)
+# ---------------------------------------------------------------------------
+
+async def _run_focus_task(task_id: str) -> None:
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(MediaTask).where(MediaTask.id == task_id))
+        task = result.scalar_one_or_none()
+        if not task:
+            logger.error(f"Focus task {task_id}: task not found in DB")
+            return
+
+        if not task.converted_wav_path:
+            logger.error(f"Focus task {task_id}: no converted WAV path — run /process first")
+            return
+
+        atomic_tokens_path = TRANSCRIPTS_DIR / f"{task_id}_atomic_tokens.json"
+        focus_srt_path     = OUTPUTS_DIR     / f"{task_id}_focus.srt"
+
+        if not atomic_tokens_path.exists():
+            logger.error(
+                f"Focus task {task_id}: atomic tokens not found at {atomic_tokens_path}. "
+                "Phase 2.6 must complete successfully before running Focus Mode."
+            )
+            return
+
+        try:
+            await asyncio.to_thread(
+                run_focus_mode,
+                task.converted_wav_path,
+                atomic_tokens_path,
+                focus_srt_path,
+            )
+            logger.info(f"Focus Mode complete for task {task_id} → {focus_srt_path}")
+        except Exception as exc:
+            logger.error(f"Focus Mode failed for task {task_id}: {exc}", exc_info=True)
+
+
+# ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
@@ -206,6 +245,36 @@ async def process_task(
 
     background_tasks.add_task(_process_task, task_id)
     return {"task_id": task_id, "status": "processing_started"}
+
+
+@app.post(
+    "/api/tasks/{task_id}/focus",
+    summary="Phase 2.7 Focus Mode: speaker-aware Pass 2 re-transcription",
+)
+async def focus_task(
+    task_id: str,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(MediaTask).where(MediaTask.id == task_id))
+    task = result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task.status != TaskStatus.COMPLETED:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Task must be COMPLETED to run Focus Mode "
+                f"(current: '{task.status.value}')"
+            ),
+        )
+
+    background_tasks.add_task(_run_focus_task, task_id)
+    return {
+        "task_id":        task_id,
+        "status":         "focus_mode_started",
+        "focus_srt_path": str(OUTPUTS_DIR / f"{task_id}_focus.srt"),
+    }
 
 
 @app.get("/api/tasks", summary="List all tasks and their current statuses")

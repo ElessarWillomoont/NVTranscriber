@@ -19,7 +19,7 @@ from backend.database.models import AudioChunk
 
 logger = logging.getLogger(__name__)
 
-ASR_MODEL_ID = "openai/whisper-large-v3"
+ASR_MODEL_ID = "openai/whisper-small"   # fast Phase 1 scout; Focus Mode overrides this
 SAMPLE_RATE = 16000
 
 # Internal sub-chunk size fed to Whisper's attention window.
@@ -28,19 +28,22 @@ SAMPLE_RATE = 16000
 _WHISPER_WINDOW_S = 30
 
 
-def _build_pipeline(device: torch.device) -> pipeline:
+def _build_pipeline(
+    device: torch.device,
+    model_id: str = ASR_MODEL_ID,
+) -> pipeline:
     dtype = torch.float16 if device.type == "cuda" else torch.float32
-    logger.info(f"Loading ASR model '{ASR_MODEL_ID}' → {device} ({dtype}) …")
+    logger.info(f"Loading ASR model '{model_id}' → {device} ({dtype}) …")
 
     model = AutoModelForSpeechSeq2Seq.from_pretrained(
-        ASR_MODEL_ID,
+        model_id,
         torch_dtype=dtype,
         low_cpu_mem_usage=True,
         use_safetensors=True,
     )
     model.to(device)
 
-    processor = AutoProcessor.from_pretrained(ASR_MODEL_ID)
+    processor = AutoProcessor.from_pretrained(model_id)
 
     asr_pipe = pipeline(
         "automatic-speech-recognition",
@@ -49,6 +52,7 @@ def _build_pipeline(device: torch.device) -> pipeline:
         feature_extractor=processor.feature_extractor,
         torch_dtype=dtype,
         device=device,
+        batch_size=16,   # parallelise 30-s sub-windows; effective on ≥16 GB VRAM
     )
     logger.info("ASR model ready")
     return asr_pipe
