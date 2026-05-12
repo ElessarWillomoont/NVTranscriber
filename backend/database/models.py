@@ -15,9 +15,13 @@ class TaskStatus(str, Enum):
     PENDING = "PENDING"
     CONVERTING = "CONVERTING"
     CHUNKING = "CHUNKING"
-    READY_FOR_INFERENCE = "READY_FOR_INFERENCE"
+    ASR_INFERENCE = "ASR_INFERENCE"
+    DIARIZING = "DIARIZING"
+    ALIGNING = "ALIGNING"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
+    # Kept for tasks completed under the Phase-1-only build
+    READY_FOR_INFERENCE = "READY_FOR_INFERENCE"
 
 
 class ChunkStatus(str, Enum):
@@ -31,6 +35,7 @@ class MediaTask(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     original_path = Column(String, nullable=False)
     converted_wav_path = Column(String, nullable=True)
+    output_srt_path = Column(String, nullable=True)
     status = Column(SAEnum(TaskStatus), default=TaskStatus.PENDING, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 

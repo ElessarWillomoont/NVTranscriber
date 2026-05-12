@@ -47,3 +47,6 @@ venv.bak/
 *.mkv
 *_processed.wav
 *_chunk_*.wav
+
+.env.example
+workspace/

@@ -1,33 +1,36 @@
-# Core API
+# --- PyTorch GPU (Windows/CUDA 12.4) ---
+# Ensuring GPU versions are preferred during installation
+# --- GPU Engines (Already installed manually) ---
+torch
+torchaudio
+
+# --- Core API ---
+numpy<2.0.0
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
 pydantic>=2.0.0
+python-multipart>=0.0.12
+python-dotenv>=1.0.0
 
-# Database
+# --- Database ---
 sqlalchemy>=2.0.0
 aiosqlite>=0.20.0
 
-# File upload support
-python-multipart>=0.0.12
+# --- GPU Monitoring & Support ---
+# official replacement for pynvml
+nvidia-ml-py>=12.535.133
 
-# GPU monitoring
-pynvml>=11.5.0
-
-# ONNX runtime (GPU-accelerated Silero VAD)
+# --- Inference Engines ---
 onnxruntime-gpu>=1.20.0
+transformers>=4.44.0
+accelerate>=0.33.0
+bitsandbytes>=0.43.0
+pyannote.audio>=3.1.0
 
-# Testing
-pytest>=7.4.0
-httpx>=0.25.0
-
-# Audio Processing
+# --- Audio I/O ---
 soundfile>=0.12.1
 
-# ------------------------------------------------------------
-# PyTorch must be installed SEPARATELY with the CUDA wheel.
-# Run setup.ps1, or manually:
-#
-#   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
-#
-# Replace cu124 with your installed CUDA version (cu118, cu121, …).
-# ------------------------------------------------------------
+# --- Testing ---
+pytest>=7.4.0
+httpx>=0.25.0
+pytest-asyncio>=0.23.0
