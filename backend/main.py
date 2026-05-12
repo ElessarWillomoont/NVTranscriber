@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.aligner import align_and_write_srt
+from backend.core.forced_aligner import forced_align_and_write_srt
 from backend.core.asr_engine import run_asr
 from backend.core.chunker import chunk_audio
 from backend.core.converter import convert_to_wav, scan_directory
@@ -80,10 +81,11 @@ async def _process_task(task_id: str) -> None:
             logger.error(f"Task {task_id} not found in DB")
             return
 
-        output_wav = CONVERTED_DIR / f"{task_id}.wav"
-        asr_json = TRANSCRIPTS_DIR / f"{task_id}_asr.json"
-        diar_json = TRANSCRIPTS_DIR / f"{task_id}_diarization.json"
-        srt_path = OUTPUTS_DIR / f"{task_id}.srt"
+        output_wav          = CONVERTED_DIR  / f"{task_id}.wav"
+        asr_json            = TRANSCRIPTS_DIR / f"{task_id}_asr.json"
+        diar_json           = TRANSCRIPTS_DIR / f"{task_id}_diarization.json"
+        atomic_tokens_path  = TRANSCRIPTS_DIR / f"{task_id}_atomic_tokens.json"
+        srt_path            = OUTPUTS_DIR     / f"{task_id}.srt"
 
         try:
             # ── Phase 1: FFmpeg conversion ──────────────────────────────────
@@ -126,10 +128,14 @@ async def _process_task(task_id: str) -> None:
                 run_diarization, str(output_wav), diar_json
             )
 
-            # ── Phase 2: Alignment + SRT ─────────────────────────────────────
+            # ── Phase 2.6: Atomic token alignment + advanced SRT rendering ──────
+            # CTC alignment → tag smoothing → atomic JSON → render_subtitles → SRT.
+            # Falls back to IoU alignment automatically if CTC fails.
             await _set_status(db, task, TaskStatus.ALIGNING)
             await asyncio.to_thread(
-                align_and_write_srt, asr_segments, diar_segments, srt_path
+                forced_align_and_write_srt,
+                str(output_wav), asr_segments, diar_segments,
+                srt_path, atomic_tokens_path,
             )
 
             task.output_srt_path = str(srt_path)
